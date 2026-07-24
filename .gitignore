@@ -2,7 +2,10 @@
 .env.*
 !.env.example
 *.db
-swing_agent.db
+*.db-journal
+*.db-wal
+*.db-shm
+swing_agent.db*
 __pycache__/
 *.pyc
 .venv/
