@@ -154,6 +154,101 @@ class SimBroker(Broker):
 
 
 # --------------------------------------------------------------------------- #
+# Virtual account: REAL Alpaca market data, but its own $2k ledger.            #
+# Decouples the strategy from an oversized/shared Alpaca paper balance — the   #
+# agent trades a self-contained small account on live prices. Ledger (cash +   #
+# positions) is persisted in State so it survives redeploys.                   #
+# --------------------------------------------------------------------------- #
+class VirtualBroker(Broker):
+    def __init__(self, cfg, state, quote_fn=None):
+        self.cfg = cfg
+        self.state = state
+        self._quote_fn = quote_fn        # injectable for tests; else Alpaca data
+        if quote_fn is None:
+            from alpaca.data.historical import StockHistoricalDataClient
+            self._data = StockHistoricalDataClient(cfg.alpaca_key, cfg.alpaca_secret)
+        raw = state.get_meta("vcash")
+        self._cash = float(raw) if raw is not None else float(cfg.account.starting_equity)
+        self._positions: dict[str, Position] = {}
+        for p in state.load_positions():
+            self._positions[p["symbol"]] = Position(
+                p["symbol"], p["qty"], p["entry"], p["stop"], p["target"])
+        self._pcache: dict[str, float] = {}
+
+    def _quote(self, symbol) -> Quote:
+        if self._quote_fn is not None:
+            return self._quote_fn(symbol)
+        from alpaca.data.requests import StockLatestQuoteRequest
+        q = self._data.get_stock_latest_quote(
+            StockLatestQuoteRequest(symbol_or_symbols=symbol))[symbol]
+        bid, ask = float(q.bid_price or 0), float(q.ask_price or 0)
+        last = (bid + ask) / 2 if (bid and ask) else (bid or ask)
+        return Quote(bid, ask, last)
+
+    def _price(self, symbol) -> float:
+        if symbol not in self._pcache:
+            self._pcache[symbol] = self._quote(symbol).last
+        return self._pcache[symbol]
+
+    def get_quote(self, symbol) -> Quote:
+        qt = self._quote(symbol)
+        self._pcache[symbol] = qt.last
+        return qt
+
+    def get_account(self) -> Account:
+        self._pcache = {}   # refresh prices once per cycle (get_account is first)
+        mv = sum(p.qty * self._price(s) for s, p in self._positions.items())
+        eq = self._cash + mv
+        return Account(round(eq, 2), round(self._cash, 2), round(self._cash, 2))
+
+    def get_positions(self) -> list[Position]:
+        out = []
+        for s, p in self._positions.items():
+            price = self._price(s)
+            p.market_value = round(p.qty * price, 2)
+            p.unrealized_pl = round((price - p.avg_entry_price) * p.qty, 2)
+            out.append(p)
+        return out
+
+    def submit_bracket(self, symbol, qty, entry, stop, target) -> str:
+        cost = qty * entry
+        if qty <= 0 or cost > self._cash:
+            return ""
+        self._cash -= cost
+        self._positions[symbol] = Position(symbol, qty, entry, stop, target)
+        self.state.set_meta("vcash", self._cash)
+        self.state.save_position(symbol, qty, entry, stop, target)
+        return f"virt-{symbol}"
+
+    def manage(self) -> list[Fill]:
+        fills = []
+        for s in list(self._positions):
+            p = self._positions[s]
+            price = self._price(s)
+            hit = None
+            if price <= p.stop:
+                hit, fx = "stop", p.stop
+            elif price >= p.target:
+                hit, fx = "target", p.target
+            if hit:
+                fills.append(self._close(s, fx, hit))
+        return fills
+
+    def _close(self, symbol, price, outcome) -> Fill:
+        p = self._positions.pop(symbol)
+        self._cash += p.qty * price
+        pl = round((price - p.avg_entry_price) * p.qty, 2)
+        self.state.set_meta("vcash", self._cash)
+        self.state.delete_position(symbol)
+        return Fill(symbol, p.qty, price, "sell", realized_pl=pl, outcome=outcome)
+
+    def close_position(self, symbol) -> Fill | None:
+        if symbol not in self._positions:
+            return None
+        return self._close(symbol, self._price(symbol), "manual")
+
+
+# --------------------------------------------------------------------------- #
 # Alpaca: real bracket orders with server-side stops.                         #
 # --------------------------------------------------------------------------- #
 class AlpacaBroker(Broker):

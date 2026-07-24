@@ -64,6 +64,25 @@ keys (and optionally `FINNHUB_API_KEY`) in `.env`.
 | `engine.py` | One cycle wiring it all together |
 | `run.py` | Entry point (sim loop / live poll) |
 
+## Virtual $2k account (paper/live)
+
+Alpaca paper accounts default to $100k and can't always be resized. So in
+`paper`/`live` mode this agent runs a **virtual account** seeded at
+`account.starting_equity` (from `config.yaml`) that trades on **real Alpaca
+market data** but keeps its own cash + positions ledger — persisted in the
+database so it survives redeploys. Sizing, P&L, and drawdown are all measured
+against the virtual $2k, completely decoupled from your real Alpaca balance (and
+immune to any leftover positions on that account).
+
+It does **not** place orders on the oversized/shared Alpaca account — it fills
+its own ledger at real prices and manages stops/targets against the live quote.
+That's the correct way to validate a small-account strategy when you can't set
+the paper balance. (Real-money live on a correctly-sized account would use the
+`AlpacaBroker` bracket path instead.)
+
+After switching modes or accounts, call **`POST /api/reset`** once to clear old
+data and start the virtual account clean at `starting_equity`.
+
 ## Web service & dashboard (runs on Railway)
 
 `app.py` is a FastAPI service with a dashboard and a background scheduler, so the

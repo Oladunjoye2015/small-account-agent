@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import config as config_mod
-from broker import AlpacaBroker, SimBroker
+from broker import AlpacaBroker, SimBroker, VirtualBroker
 from data import MarketData
 from filters import (FinnhubFilters, price_ok, spread_ok, window_ok)
 from risk import RiskManager
@@ -27,25 +27,26 @@ from state import State
 from strategy import TrendPullback
 
 
-def build_broker(cfg):
+def build_broker(cfg, state):
     if cfg.mode == "sim":
         return SimBroker(cfg.universe, starting_cash=cfg.account.starting_equity)
-    if cfg.mode == "paper":
-        return AlpacaBroker(cfg.alpaca_key, cfg.alpaca_secret, paper=True)
-    if cfg.mode == "live":
-        print("[ENGINE] *** LIVE MODE — REAL MONEY ***")
-        return AlpacaBroker(cfg.alpaca_key, cfg.alpaca_secret, paper=False)
+    if cfg.mode in ("paper", "live"):
+        # Virtual $2k account on REAL Alpaca market data. This deliberately does
+        # NOT place orders on the oversized/shared Alpaca account — it simulates
+        # the small account internally so sizing, P&L and drawdown are honest.
+        # (True real-money live would need a correctly-sized account + AlpacaBroker.)
+        return VirtualBroker(cfg, state)
     raise ValueError(f"unknown mode {cfg.mode}")
 
 
 class SwingEngine:
     def __init__(self, cfg, state: State | None = None):
         self.cfg = cfg
-        self.broker = build_broker(cfg)
+        self.state = state or State()
+        self.broker = build_broker(cfg, self.state)
         self.data = MarketData(cfg)
         self.strategy = TrendPullback(cfg)
         self.risk = RiskManager(cfg)
-        self.state = state or State()
         self.finnhub = FinnhubFilters(cfg.finnhub_api_key)
         self.state.log(f"engine started | mode={cfg.mode} | universe={','.join(cfg.universe)} "
                        f"| equity={cfg.account.starting_equity}")
@@ -71,8 +72,8 @@ class SwingEngine:
             except Exception as exc:  # noqa: BLE001
                 self.state.log(f"hygiene error: {exc!r}", level="error")
 
-        # 3. Manage sim brackets.
-        if isinstance(self.broker, SimBroker):
+        # 3. Manage brackets (sim + virtual): close on stop/target, record.
+        if hasattr(self.broker, "manage"):
             for f in self.broker.manage():
                 self.state.record_trade(f.symbol, "sell", f.qty, None, f.price,
                                         f.realized_pl, f.outcome, self.cfg.mode)
@@ -152,9 +153,10 @@ class SwingEngine:
         except Exception as exc:  # noqa: BLE001
             return {"mode": self.cfg.mode, "error": repr(exc)}
         peak = float(self.state.get_meta("peak_equity", account.equity) or account.equity)
-        dd = (peak - account.equity) / peak if peak else 0.0
+        dd = max(0.0, (peak - account.equity) / peak) if peak else 0.0
         s = self._status(account, positions, [], "ok")
         s.update({
+            "backend": getattr(self.state, "backend", "sqlite"),
             "starting_equity": self.cfg.account.starting_equity,
             "pnl": round(account.equity - self.cfg.account.starting_equity, 2),
             "peak_equity": round(peak, 2),

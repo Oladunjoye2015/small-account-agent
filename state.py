@@ -63,7 +63,25 @@ class State:
         self._exec("CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT)")
         self._exec(f"""CREATE TABLE IF NOT EXISTS equity(
             id {ai}, ts TEXT, equity {n}, cash {n})""")
+        self._exec(f"""CREATE TABLE IF NOT EXISTS positions(
+            symbol TEXT PRIMARY KEY, qty {n}, entry {n}, stop {n}, target {n})""")
         self.conn.commit()
+
+    # --- virtual-account ledger (persisted so it survives redeploys) ------ #
+    def save_position(self, symbol, qty, entry, stop, target):
+        self._exec("INSERT INTO positions(symbol,qty,entry,stop,target) VALUES(?,?,?,?,?) "
+                   "ON CONFLICT(symbol) DO UPDATE SET qty=EXCLUDED.qty, entry=EXCLUDED.entry, "
+                   "stop=EXCLUDED.stop, target=EXCLUDED.target",
+                   (symbol, qty, entry, stop, target))
+        self.conn.commit()
+
+    def delete_position(self, symbol):
+        self._exec("DELETE FROM positions WHERE symbol=?", (symbol,))
+        self.conn.commit()
+
+    def load_positions(self):
+        rows = self._exec("SELECT symbol,qty,entry,stop,target FROM positions").fetchall()
+        return [dict(r) for r in rows]
 
     # --- writes ---------------------------------------------------------- #
     def record_trade(self, symbol, side, qty, entry, exit_, realized_pl, outcome, mode):
@@ -142,6 +160,19 @@ class State:
         peak = max(prev, current)
         self.set_meta("peak_equity", peak)
         return peak
+
+    def reset(self):
+        """Wipe trades, equity snapshots, logs, and the drawdown peak — for a
+        clean restart when switching modes/accounts."""
+        for tbl in ("trades", "equity", "logs", "positions"):
+            self._exec(f"DELETE FROM {tbl}")
+        self._exec("DELETE FROM meta WHERE key IN (?,?)", ("peak_equity", "vcash"))
+        self.conn.commit()
+
+    def realized_total(self) -> float:
+        row = self._exec(
+            "SELECT COALESCE(SUM(realized_pl),0) AS s FROM trades WHERE side='sell'").fetchone()
+        return float(row["s"] or 0.0)
 
     # --- reads for the dashboard ----------------------------------------- #
     def fetch_trades(self, limit=100):

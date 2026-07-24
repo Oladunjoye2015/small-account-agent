@@ -108,6 +108,14 @@ def api_cycle():
     return _run_cycle_guarded()
 
 
+@app.post("/api/reset", dependencies=[Depends(require_token)])
+def api_reset():
+    """Clear all trades/equity/logs and the drawdown peak — a clean restart
+    (e.g. after switching from sim to paper, or resetting the paper account)."""
+    get_engine().state.reset()
+    return {"ok": True, "reset": True}
+
+
 @app.get("/api/trades")
 def api_trades(limit: int = 100):
     return JSONResponse(get_engine().state.fetch_trades(max(1, min(limit, 1000))))
