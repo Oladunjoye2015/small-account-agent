@@ -13,5 +13,6 @@ numpy>=1.26
 # Broker + market data (paper/live). Verify latest before live use.
 alpaca-py>=0.40,<1.0
 
-# (State uses the stdlib sqlite3 — no extra dependency.)
+# State: SQLite (stdlib) by default; Postgres when DATABASE_URL is set.
+psycopg[binary]>=3.1
 # (News/earnings filters use urllib — no extra dependency.)

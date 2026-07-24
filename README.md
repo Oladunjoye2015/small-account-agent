@@ -83,13 +83,20 @@ market hours automatically.
 1. Push this folder to its own GitHub repo.
 2. Railway → New Project → Deploy from GitHub repo → pick it. Nixpacks builds it;
    `railway.json` sets the start command and `/health` check.
-3. **Add a Volume** (Railway → service → Volumes) mounted at `/data`, and set
-   `STATE_DB=/data/swing_agent.db`. SQLite is otherwise wiped on every redeploy —
-   the volume makes your track record durable. (Or port `state.py` to Postgres;
-   the day-trader project shows that pattern.)
+3. **Storage — pick one:**
+   - **Postgres (recommended):** add a PostgreSQL database in the project, then
+     on the web service **reference its `DATABASE_URL`** (Variables → New →
+     Add Reference → Postgres → `DATABASE_URL`). The agent auto-creates its
+     tables on boot and they show up in Railway's Data tab. If you added Postgres
+     but the tables never appear, the `DATABASE_URL` isn't linked to the service —
+     that reference is the fix.
+   - **SQLite on a volume:** add a Volume mounted at `/data` and set
+     `STATE_DB=/data/swing_agent.db`. (Without a volume, SQLite is wiped on every
+     redeploy.)
 4. Variables: `AGENT_MODE=paper`, `ALPACA_API_KEY` / `ALPACA_SECRET_KEY` (paper
    keys), `FINNHUB_API_KEY` (optional), `ENABLE_SCHEDULER=true`, `API_TOKEN`
-   (any long random string), `STATE_DB=/data/swing_agent.db`.
+   (any long random string), and either the referenced `DATABASE_URL` (Postgres)
+   or `STATE_DB=/data/swing_agent.db` (volume).
 5. Generate a domain, open it, and watch it run.
 
 ### The safe ramp (in `config.yaml`)
