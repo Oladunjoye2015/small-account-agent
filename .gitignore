@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+*.db
+swing_agent.db
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store

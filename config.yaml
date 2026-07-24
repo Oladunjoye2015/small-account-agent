@@ -1,0 +1,65 @@
+# Small-account swing agent — configuration.
+# Percentages are in PERCENT units (25 = 25%, 0.25 = 0.25%).
+# Secrets (API keys) come from the environment / .env, never from this file.
+
+account:
+  starting_equity: 2000
+  use_margin: false          # cash-style: no leverage, no PDT exposure
+  allow_shorts: false
+  allow_options: false
+  allow_crypto: false
+
+risk:
+  risk_per_trade_pct: 0.25   # 0.25% of equity risked per trade (~$5 on $2k)
+  max_position_pct: 25       # a position may use at most 25% of equity
+  max_open_positions: 1      # one position at a time
+  max_trades_per_day: 2      # hard cap on new entries per day
+  daily_loss_limit_pct: 0.75 # stop trading for the day past -0.75%
+  weekly_loss_limit_pct: 2.0 # stop trading for the week past -2%
+  max_drawdown_pct: 6.0      # halt entirely past -6% from peak equity
+  consecutive_loss_limit: 3  # pause after 3 losing trades in a row
+  minimum_reward_risk: 1.5   # only take setups with >= 1.5 : 1 reward:risk
+  averaging_down: false      # never add to a losing position
+
+strategy:
+  timeframe: "1Hour"          # primary trend timeframe
+  confirmation_timeframe: "15Min"  # entry-trigger timeframe
+  direction: "long_only"
+  setup: "trend_pullback"     # uptrend + pullback to MA + lower-tf confirmation
+  minimum_price: 10           # skip stocks under $10
+  regular_hours_only: true
+  block_first_minutes: 30     # no entries in the first 30 min after the open
+  block_new_entries_after: "15:00"  # ET; no new entries after this
+  earnings_filter: true       # skip symbols near earnings
+  news_filter: true           # skip symbols with fresh high-impact news (Finnhub)
+  spread_filter: true         # skip when the bid/ask spread is too wide
+
+execution:
+  order_type: "bracket"       # entry + stop-loss + take-profit as one order
+  require_stop_loss: true     # never hold a position without a stop
+  use_limit_entries: true     # enter with a limit order, not market
+  cancel_stale_entry_minutes: 5  # cancel an unfilled entry after 5 min
+  reject_duplicate_orders: true
+  close_if_stop_missing: true # if a live position has no stop, flatten it
+
+deployment:
+  initial_mode: "paper"
+  paper_minimum_trades: 100      # take >=100 paper trades before going live
+  first_live_trade_risk_dollars: 2   # risk $2 on the very first live trades
+  normal_trade_risk_dollars: 5       # then step up to $5 risk per trade
+
+# Universe to scan (liquid, > $10, optionable large/mid caps work well here).
+universe:
+  - AAPL
+  - MSFT
+  - NVDA
+  - AMD
+  - AMZN
+  - GOOGL
+  - META
+
+# Where to trade. sim = offline simulator; paper/live = Alpaca.
+mode: "sim"
+
+# Seconds between engine cycles (swing agent polls slowly; 1H bars).
+poll_seconds: 300

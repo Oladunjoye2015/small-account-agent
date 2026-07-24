@@ -1,0 +1,17 @@
+# Web service
+fastapi>=0.110
+uvicorn[standard]>=0.29
+APScheduler>=3.10
+
+# Config
+PyYAML>=6.0
+python-dotenv>=1.0
+
+# Strategy math
+numpy>=1.26
+
+# Broker + market data (paper/live). Verify latest before live use.
+alpaca-py>=0.40,<1.0
+
+# (State uses the stdlib sqlite3 — no extra dependency.)
+# (News/earnings filters use urllib — no extra dependency.)
