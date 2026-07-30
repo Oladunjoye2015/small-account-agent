@@ -130,8 +130,8 @@ class SwingEngine:
                 continue
 
             shares = self.risk.size(setup, account, self.cfg.mode, live_done)
-            if shares < 1:
-                self.state.log(f"skip {sym}: size < 1 share for ${setup.entry}")
+            if shares <= 0 or shares * setup.entry < 1.0:
+                self.state.log(f"skip {sym}: position too small for ${setup.entry}")
                 continue
 
             oid = self.broker.submit_bracket(sym, shares, setup.entry, setup.stop, setup.target)

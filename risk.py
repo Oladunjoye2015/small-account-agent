@@ -53,10 +53,13 @@ class RiskManager:
 
         return Gate(True, False, "ok")
 
-    def size(self, setup, account, mode: str, live_trades_done: int) -> int:
+    def size(self, setup, account, mode: str, live_trades_done: int) -> float:
+        """Fractional-share position sizing. Whole shares make a $2k account
+        untradeable on $200+ stocks (one share blows the risk budget); the
+        virtual/sim ledger supports fractions, so we size by dollars instead."""
         risk_per_share = setup.entry - setup.stop
         if risk_per_share <= 0:
-            return 0
+            return 0.0
         # Dollars to risk: percentage of equity, capped by the deployment dollar
         # limits (and a smaller cap for the very first live trades).
         risk_dollars = account.equity * self.r.risk_per_trade_frac
@@ -65,8 +68,8 @@ class RiskManager:
         if mode == "live" and live_trades_done < 5:
             risk_dollars = min(risk_dollars, d.first_live_trade_risk_dollars)
 
-        shares = int(risk_dollars / risk_per_share)
+        shares = risk_dollars / risk_per_share
         # Cap by max position size and available cash (cash account, no margin).
-        shares = min(shares, int(account.equity * self.r.max_position_frac / setup.entry))
-        shares = min(shares, int(account.cash / setup.entry))
-        return max(0, shares)
+        shares = min(shares, account.equity * self.r.max_position_frac / setup.entry)
+        shares = min(shares, account.cash / setup.entry)
+        return round(max(0.0, shares), 4)

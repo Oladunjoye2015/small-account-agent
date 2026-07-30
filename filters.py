@@ -14,9 +14,12 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-NEWS_KEYWORDS = ("halt", "investigation", "probe", "lawsuit", "sued", "sec ", "fraud",
-                 "bankruptcy", "recall", "downgrade", "cuts guidance", "delisting",
-                 "subpoena", "fda", "profit warning", "short seller")
+# Only genuinely high-impact events. Generic words like "lawsuit", "sued",
+# "investigation", "downgrade" fire constantly on mega-caps and would block
+# them nearly every day, so they're intentionally excluded.
+NEWS_KEYWORDS = ("trading halt", "halted", "fraud", "bankruptcy", "recall",
+                 "delisting", "subpoena", "cuts guidance", "profit warning",
+                 "fda rejects", "restatement")
 
 
 @dataclass

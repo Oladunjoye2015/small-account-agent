@@ -131,6 +131,10 @@ def load(path: str = "config.yaml") -> Config:
     _apply(cfg.deployment, raw.get("deployment", {}))
     if raw.get("universe"):
         cfg.universe = [str(s).upper() for s in raw["universe"]]
+    # Env override so you can retune the universe from Railway without a push.
+    sym_env = os.getenv("SYMBOLS", "").strip()
+    if sym_env:
+        cfg.universe = [s.strip().upper() for s in sym_env.split(",") if s.strip()]
     cfg.mode = os.getenv("AGENT_MODE", raw.get("mode", cfg.mode)).strip().lower()
     cfg.poll_seconds = int(os.getenv("POLL_SECONDS", raw.get("poll_seconds", cfg.poll_seconds)))
 

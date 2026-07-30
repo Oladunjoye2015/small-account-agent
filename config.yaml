@@ -48,15 +48,25 @@ deployment:
   first_live_trade_risk_dollars: 2   # risk $2 on the very first live trades
   normal_trade_risk_dollars: 5       # then step up to $5 risk per trade
 
-# Universe to scan (liquid, > $10, optionable large/mid caps work well here).
+# Universe to scan. Mix of liquid sector/index ETFs (no earnings blackouts, so
+# always eligible — great during earnings season) and liquid large caps.
+# Fractional sizing means share price no longer matters on a $2k account.
+# Override at runtime with the SYMBOLS env var (comma-separated).
 universe:
+  - SPY    # S&P 500
+  - QQQ    # Nasdaq 100
+  - IWM    # small caps
+  - SMH    # semiconductors
+  - XLK    # technology
+  - XLF    # financials
+  - XLE    # energy
+  - AMD
   - AAPL
   - MSFT
   - NVDA
-  - AMD
-  - AMZN
   - GOOGL
   - META
+  - AMZN
 
 # Where to trade. sim = offline simulator; paper/live = Alpaca.
 mode: "sim"
