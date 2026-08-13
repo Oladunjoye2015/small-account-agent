@@ -180,6 +180,7 @@ class SwingEngine:
             "drawdown_pct": round(dd * 100, 2),
             "paper_trades_done": self.state.total_trades(mode="paper"),
             "paper_minimum_trades": self.cfg.deployment.paper_minimum_trades,
+            "universe": self.cfg.universe,
             "open_positions_detail": [
                 {"symbol": p.symbol, "qty": p.qty, "avg_entry_price": p.avg_entry_price,
                  "stop": p.stop, "target": p.target, "unrealized_pl": p.unrealized_pl}

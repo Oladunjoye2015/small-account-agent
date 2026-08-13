@@ -34,6 +34,12 @@ class CoreTests(unittest.TestCase):
         self.assertEqual([], broker.get_positions())
         self.assertEqual(2000, broker.get_account().cash)
 
+    def test_status_exposes_active_universe(self):
+        from engine import SwingEngine
+        cfg = config_mod.Config(mode="sim", universe=["NVDA", "GOOGL", "SPY"])
+        engine = SwingEngine(cfg, State())
+        self.assertEqual(["NVDA", "GOOGL", "SPY"], engine.status()["universe"])
+
     def test_eastern_time_observes_standard_and_daylight_time(self):
         winter = _et_now(datetime(2026, 1, 15, 15, tzinfo=timezone.utc))
         summer = _et_now(datetime(2026, 7, 15, 15, tzinfo=timezone.utc))

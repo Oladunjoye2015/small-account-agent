@@ -173,8 +173,10 @@ th{color:var(--mut);font-weight:500;font-size:11px;text-transform:uppercase}td.n
 </style></head><body>
 <header><h1>Small-Account Swing Researcher</h1>
 <span id="modeBadge" class="badge">…</span><span id="haltBadge" class="badge halt" style="display:none">HALTED</span>
+<span id="universeBadge" class="badge">…</span>
 <div class="spacer"></div><span id="msg"></span>
-<button id="cycleBtn" class="primary">Run cycle</button><button id="tokenBtn" title="Set API token">🔑</button></header>
+<button id="cycleBtn" class="primary">Run cycle</button><button id="resetBtn">Reset virtual account</button>
+<button id="tokenBtn" title="Set API token">🔑</button></header>
 <main>
 <div class="grid">
 <div class="card"><div class="k">Equity</div><div class="v" id="equity">—</div></div>
@@ -211,6 +213,7 @@ y:{ticks:{color:"#8b9bb0"},grid:{color:"#1b2530"}}}}});}else{chart.data.labels=l
 async function refresh(){
 try{const s=await jget("/api/status");
 const mb=$("modeBadge");mb.textContent=s.mode;mb.className="badge "+(s.mode||"");
+$("universeBadge").textContent=(s.universe||[]).join(" · ")||"no universe";
 $("haltBadge").style.display=(s.note&&s.note.indexOf("drawdown")>=0)?"":"none";
 $("equity").textContent=money(s.equity);
 const p=$("pnl");p.textContent=money(s.pnl);p.className="v "+cls(s.pnl);
@@ -239,5 +242,11 @@ $("cycleBtn").onclick=async()=>{const b=$("cycleBtn");b.disabled=true;b.textCont
 try{const r=await fetch("/api/cycle",{method:"POST",headers:hdr()});
 if(r.status===401)flash("Unauthorized — set token (🔑)");else{await r.json();flash("cycle ok");await refresh();}}
 catch(e){flash("failed");}b.disabled=false;b.textContent="Run cycle";};
+$("resetBtn").onclick=async()=>{if(!confirm("Reset the virtual account to $2,000? This clears positions, trades, logs, and equity history."))return;
+const b=$("resetBtn");b.disabled=true;b.textContent="Resetting…";
+try{const r=await fetch("/api/reset",{method:"POST",headers:hdr()});
+if(r.status===401)flash("Unauthorized — set token (🔑)");else if(!r.ok)flash("Reset failed");
+else{flash("Virtual account reset");await refresh();}}catch(e){flash("Reset failed");}
+b.disabled=false;b.textContent="Reset virtual account";};
 refresh();setInterval(refresh,15000);
 </script></body></html>"""
