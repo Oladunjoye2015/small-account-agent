@@ -121,6 +121,9 @@ class SimBroker(Broker):
         cost = qty * entry
         if cost > self._cash or qty <= 0:
             return ""
+        # The synthetic strategy series and broker ticker are intentionally
+        # separate generators; synchronize them at fill so P&L starts at zero.
+        self._prices[symbol] = entry
         self._cash -= cost
         self._positions[symbol] = Position(symbol, qty, entry, stop, target)
         return f"sim-{symbol}-{int(datetime.now(timezone.utc).timestamp())}"
@@ -211,13 +214,22 @@ class VirtualBroker(Broker):
         return out
 
     def submit_bracket(self, symbol, qty, entry, stop, target) -> str:
-        cost = qty * entry
+        quote = self._quote(symbol)
+        # Model a limit buy honestly: no fill when the current ask is above the
+        # limit. A future pending-order model can replace this all-or-none check.
+        if quote.ask <= 0 or quote.ask > entry:
+            return ""
+        # Use the limit itself as a conservative fill price even when the ask
+        # is better; this keeps the ledger and recorded order price identical.
+        fill = entry
+        cost = qty * fill
         if qty <= 0 or cost > self._cash:
             return ""
         self._cash -= cost
-        self._positions[symbol] = Position(symbol, qty, entry, stop, target)
+        self._positions[symbol] = Position(symbol, qty, fill, stop, target)
+        self._pcache[symbol] = quote.last
         self.state.set_meta("vcash", self._cash)
-        self.state.save_position(symbol, qty, entry, stop, target)
+        self.state.save_position(symbol, qty, fill, stop, target)
         return f"virt-{symbol}"
 
     def manage(self) -> list[Fill]:
@@ -246,6 +258,11 @@ class VirtualBroker(Broker):
         if symbol not in self._positions:
             return None
         return self._close(symbol, self._price(symbol), "manual")
+
+    def reset(self) -> None:
+        self._cash = float(self.cfg.account.starting_equity)
+        self._positions.clear()
+        self._pcache.clear()
 
 
 # --------------------------------------------------------------------------- #

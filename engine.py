@@ -30,12 +30,17 @@ from strategy import TrendPullback
 def build_broker(cfg, state):
     if cfg.mode == "sim":
         return SimBroker(cfg.universe, starting_cash=cfg.account.starting_equity)
-    if cfg.mode in ("paper", "live"):
+    if cfg.mode == "paper":
         # Virtual $2k account on REAL Alpaca market data. This deliberately does
         # NOT place orders on the oversized/shared Alpaca account — it simulates
         # the small account internally so sizing, P&L and drawdown are honest.
         # (True real-money live would need a correctly-sized account + AlpacaBroker.)
         return VirtualBroker(cfg, state)
+    if cfg.mode == "live":
+        raise RuntimeError(
+            "live trading is intentionally disabled: paper mode still uses a virtual ledger. "
+            "Implement and validate broker reconciliation before enabling real orders."
+        )
     raise ValueError(f"unknown mode {cfg.mode}")
 
 
@@ -80,6 +85,9 @@ class SwingEngine:
                 self.state.log(f"EXIT {f.symbol} {f.outcome} @ {f.price} pl={f.realized_pl:+.2f}")
                 events.append(f"exit {f.symbol} ({f.outcome})")
 
+        # Exits change both cash and equity. Never gate or report against the
+        # account snapshot captured before bracket management.
+        account = self.broker.get_account()
         positions = self.broker.get_positions()
 
         # 4. Portfolio gate.
@@ -143,7 +151,16 @@ class SwingEngine:
                 events.append(f"enter {sym} x{shares}")
                 break  # one position at a time
 
+        # Return the state after any entry made in this cycle.
+        account = self.broker.get_account()
+        positions = self.broker.get_positions()
         return self._status(account, positions, events, "ok")
+
+    def reset(self) -> None:
+        """Reset persistent and in-memory virtual-account state atomically."""
+        self.state.reset()
+        if hasattr(self.broker, "reset"):
+            self.broker.reset()
 
     def status(self) -> dict:
         """Read-only snapshot for the API/dashboard (does not run a cycle)."""

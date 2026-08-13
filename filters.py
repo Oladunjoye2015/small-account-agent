@@ -8,11 +8,15 @@ rather than freezing the agent. Time/price/spread are local and deterministic.
 from __future__ import annotations
 
 import json
+import ssl
 import time as _time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+EASTERN = ZoneInfo("America/New_York")
 
 # Only genuinely high-impact events. Generic words like "lawsuit", "sued",
 # "investigation", "downgrade" fire constantly on mega-caps and would block
@@ -30,7 +34,9 @@ class FilterResult:
 
 def _et_now(now=None) -> datetime:
     now = now or datetime.now(timezone.utc)
-    return now - timedelta(hours=4)   # EDT approximation
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    return now.astimezone(EASTERN)
 
 
 # --- local filters --------------------------------------------------------- #
@@ -84,7 +90,12 @@ class FinnhubFilters:
         params = {**params, "token": self.api_key}
         url = f"https://finnhub.io/api/v1/{path}?{urllib.parse.urlencode(params)}"
         req = urllib.request.Request(url, headers={"X-Finnhub-Token": self.api_key})
-        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+        try:
+            import certifi
+            context = ssl.create_default_context(cafile=certifi.where())
+        except ImportError:
+            context = ssl.create_default_context()
+        with urllib.request.urlopen(req, timeout=self.timeout, context=context) as resp:
             return json.loads(resp.read().decode("utf-8"))
 
     def news_ok(self, symbol: str, now=None) -> FilterResult:

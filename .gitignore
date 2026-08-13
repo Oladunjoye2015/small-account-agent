@@ -11,3 +11,5 @@ __pycache__/
 .venv/
 venv/
 .DS_Store
+massive-*-report.json
+candidate-selection-report.json

@@ -13,6 +13,9 @@ from __future__ import annotations
 import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+EASTERN = ZoneInfo("America/New_York")
 
 
 def _utcnow():
@@ -121,9 +124,13 @@ class State:
 
     def trades_today(self, now=None) -> int:
         now = now or _utcnow()
+        et = now.astimezone(EASTERN)
+        local_start = datetime(et.year, et.month, et.day, tzinfo=EASTERN)
+        start = local_start.astimezone(timezone.utc)
+        end = (local_start + timedelta(days=1)).astimezone(timezone.utc)
         row = self._exec(
-            "SELECT COUNT(*) AS n FROM trades WHERE side='buy' AND substr(ts,1,10)=?",
-            (now.date().isoformat(),)).fetchone()
+            "SELECT COUNT(*) AS n FROM trades WHERE side='buy' AND ts>=? AND ts<?",
+            (start.isoformat(), end.isoformat())).fetchone()
         return int(row["n"])
 
     def realized_pl_since(self, since: datetime) -> float:
@@ -134,13 +141,16 @@ class State:
 
     def pl_today(self, now=None) -> float:
         now = now or _utcnow()
-        start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+        et = now.astimezone(EASTERN)
+        start = datetime(et.year, et.month, et.day, tzinfo=EASTERN).astimezone(timezone.utc)
         return self.realized_pl_since(start)
 
     def pl_this_week(self, now=None) -> float:
         now = now or _utcnow()
-        start = now - timedelta(days=now.weekday())
-        start = datetime(start.year, start.month, start.day, tzinfo=timezone.utc)
+        et = now.astimezone(EASTERN)
+        monday = et - timedelta(days=et.weekday())
+        start = datetime(monday.year, monday.month, monday.day,
+                         tzinfo=EASTERN).astimezone(timezone.utc)
         return self.realized_pl_since(start)
 
     def consecutive_losses(self) -> int:

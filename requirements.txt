@@ -6,6 +6,7 @@ APScheduler>=3.10
 # Config
 PyYAML>=6.0
 python-dotenv>=1.0
+certifi>=2024.2
 
 # Strategy math
 numpy>=1.26

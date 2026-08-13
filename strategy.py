@@ -32,6 +32,15 @@ class Setup:
     reason: str
 
 
+@dataclass
+class Assessment:
+    symbol: str
+    score: int
+    setup: Setup | None
+    checks: dict[str, bool]
+    reasons: list[str]
+
+
 def _ema(values, span: int) -> np.ndarray:
     a = np.asarray(values, dtype=float)
     if a.size == 0:
@@ -54,12 +63,16 @@ class TrendPullback:
         self.min_rr = cfg.risk.minimum_reward_risk
 
     def generate(self, symbol: str, bars_1h, bars_15m) -> Setup | None:
+        return self.assess(symbol, bars_1h, bars_15m).setup
+
+    def assess(self, symbol: str, bars_1h, bars_15m) -> Assessment:
+        """Score a symbol and explain near-misses for research/scanning."""
         closes = bars_1h.closes
         lows = bars_1h.lows
         if len(closes) < self.slow + self.pullback_lookback + 2:
-            return None
+            return Assessment(symbol, 0, None, {}, ["insufficient 1-hour history"])
         if len(bars_15m.closes) < 30:
-            return None
+            return Assessment(symbol, 0, None, {}, ["insufficient 15-minute history"])
 
         ema_fast = _ema(closes, self.fast)
         ema_slow = _ema(closes, self.slow)
@@ -69,35 +82,39 @@ class TrendPullback:
         uptrend = (ema_fast[-1] > ema_slow[-1]
                    and price > ema_slow[-1]
                    and ema_slow[-1] > ema_slow[-5])
-        if not uptrend:
-            return None
 
         # 2. Pullback: a recent low touched the fast-EMA zone, price now holding
         #    above the fast EMA (bounced).
         recent_low = min(lows[-self.pullback_lookback:])
         touched = recent_low <= ema_fast[-1] * (1 + self.pullback_band)
         holding = price > ema_fast[-1]
-        if not (touched and holding):
-            return None
+        pullback = touched and holding
 
         # 3. 15m confirmation: fast>slow EMA and momentum turning up.
         c15 = bars_15m.closes
         ef15, es15 = _ema(c15, 9), _ema(c15, 21)
         confirm = ef15[-1] > es15[-1] and c15[-1] > c15[-2] and c15[-1] > ef15[-1]
-        if not confirm:
-            return None
+        checks = {"uptrend": bool(uptrend), "pullback": bool(pullback),
+                  "confirmation": bool(confirm)}
+        score = 35 * uptrend + 35 * pullback + 30 * confirm
+        reasons = [name for name, passed in checks.items() if not passed]
+        if not all(checks.values()):
+            return Assessment(symbol, int(score), None, checks,
+                              [f"missing {name}" for name in reasons])
 
         # Entry / stop / target.
         entry = price
         stop = recent_low * (1 - self.stop_buffer)
         risk = entry - stop
         if risk <= 0:
-            return None
+            return Assessment(symbol, int(score), None, checks, ["invalid stop distance"])
         target = entry + max(self.min_rr, self.min_rr) * risk
         rr = (target - entry) / risk
         if rr < self.min_rr:
-            return None
+            return Assessment(symbol, int(score), None, checks,
+                              [f"reward/risk {rr:.2f} below {self.min_rr:.2f}"])
 
-        return Setup(symbol=symbol, entry=round(entry, 2), stop=round(stop, 2),
-                     target=round(target, 2), reward_risk=round(rr, 2),
-                     reason="trend_pullback")
+        setup = Setup(symbol=symbol, entry=round(entry, 2), stop=round(stop, 2),
+                      target=round(target, 2), reward_risk=round(rr, 2),
+                      reason="trend_pullback")
+        return Assessment(symbol, 100, setup, checks, [])

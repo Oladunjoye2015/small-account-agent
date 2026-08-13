@@ -142,7 +142,13 @@ def load(path: str = "config.yaml") -> Config:
     cfg.alpaca_secret = os.getenv("ALPACA_SECRET_KEY", "").strip()
     cfg.finnhub_api_key = os.getenv("FINNHUB_API_KEY", "").strip()
 
-    if cfg.mode in ("paper", "live") and not (cfg.alpaca_key and cfg.alpaca_secret):
+    if cfg.mode not in ("sim", "paper", "live"):
+        raise RuntimeError(f"invalid AGENT_MODE={cfg.mode!r}; expected sim or paper")
+    if cfg.mode == "live":
+        raise RuntimeError(
+            "AGENT_MODE=live is disabled until real-order reconciliation is implemented and tested"
+        )
+    if cfg.mode == "paper" and not (cfg.alpaca_key and cfg.alpaca_secret):
         raise RuntimeError(
             f"mode={cfg.mode} needs ALPACA_API_KEY and ALPACA_SECRET_KEY. "
             "Set them in .env / Railway, or use mode=sim."

@@ -48,25 +48,14 @@ deployment:
   first_live_trade_risk_dollars: 2   # risk $2 on the very first live trades
   normal_trade_risk_dollars: 5       # then step up to $5 risk per trade
 
-# Universe to scan. Mix of liquid sector/index ETFs (no earnings blackouts, so
-# always eligible — great during earnings season) and liquid large caps.
-# Fractional sizing means share price no longer matters on a $2k account.
-# Override at runtime with the SYMBOLS env var (comma-separated).
+# Focused virtual-research universe. Selected using 2021-2024 development data,
+# then validated on a frozen 2025 holdout in one shared $2,000 portfolio:
+# 32 trades, +2.67%, PF 1.64, max drawdown 1.21%. This is a research gate, not
+# proof of future returns. Override with SYMBOLS for a new experiment.
 universe:
-  - SPY    # S&P 500
-  - QQQ    # Nasdaq 100
-  - IWM    # small caps
-  - SMH    # semiconductors
-  - XLK    # technology
-  - XLF    # financials
-  - XLE    # energy
-  - AMD
-  - AAPL
-  - MSFT
   - NVDA
   - GOOGL
-  - META
-  - AMZN
+  - SPY
 
 # Where to trade. sim = offline simulator; paper/live = Alpaca.
 mode: "sim"

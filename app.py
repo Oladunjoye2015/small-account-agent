@@ -17,7 +17,8 @@ from __future__ import annotations
 import os
 import threading
 from contextlib import asynccontextmanager
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, time, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -32,6 +33,7 @@ ENABLE_SCHEDULER = os.getenv("ENABLE_SCHEDULER", "false").strip().lower() in ("1
 _engine: SwingEngine | None = None
 _lock = threading.Lock()
 _scheduler = None
+EASTERN = ZoneInfo("America/New_York")
 
 
 def get_engine() -> SwingEngine:
@@ -45,7 +47,7 @@ def _market_is_open() -> bool:
     eng = get_engine()
     if eng.cfg.mode == "sim":
         return True
-    now_et = datetime.now(timezone.utc) - timedelta(hours=4)
+    now_et = datetime.now(timezone.utc).astimezone(EASTERN)
     if now_et.weekday() >= 5:
         return False
     return time(9, 30) <= now_et.time() <= time(16, 0)
@@ -83,12 +85,12 @@ async def lifespan(app: FastAPI):
         _scheduler.shutdown(wait=False)
 
 
-app = FastAPI(title="Small-Account Swing Agent", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Small-Account Swing Researcher", version="2.0.0", lifespan=lifespan)
 
 
 def require_token(authorization: str = Header(default="")):
     if not API_TOKEN:
-        return
+        raise HTTPException(status_code=503, detail="API_TOKEN is required for mutation endpoints")
     if authorization != f"Bearer {API_TOKEN}":
         raise HTTPException(status_code=401, detail="invalid or missing API token")
 
@@ -112,7 +114,8 @@ def api_cycle():
 def api_reset():
     """Clear all trades/equity/logs and the drawdown peak — a clean restart
     (e.g. after switching from sim to paper, or resetting the paper account)."""
-    get_engine().state.reset()
+    with _lock:
+        get_engine().reset()
     return {"ok": True, "reset": True}
 
 
@@ -138,7 +141,7 @@ def dashboard():
 
 DASHBOARD_HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Swing Agent</title>
+<title>Swing Researcher</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
 :root{--bg:#0b0f14;--panel:#141b24;--line:#243140;--txt:#e6edf3;--mut:#8b9bb0;
@@ -168,7 +171,7 @@ th{color:var(--mut);font-weight:500;font-size:11px;text-transform:uppercase}td.n
 .logs div{padding:2px 0;border-bottom:1px solid #1b2530}.lvl-error{color:var(--red)}.lvl-warn{color:#d29922}
 .chip{font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid var(--line)}.b-buy{color:var(--green)}.b-sell{color:var(--red)}
 </style></head><body>
-<header><h1>Small-Account Swing Agent</h1>
+<header><h1>Small-Account Swing Researcher</h1>
 <span id="modeBadge" class="badge">…</span><span id="haltBadge" class="badge halt" style="display:none">HALTED</span>
 <div class="spacer"></div><span id="msg"></span>
 <button id="cycleBtn" class="primary">Run cycle</button><button id="tokenBtn" title="Set API token">🔑</button></header>
